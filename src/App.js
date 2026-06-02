@@ -163,29 +163,37 @@ const SettingsModal = ({ settings, onSave, onClose }) => {
       sheet.appendRow(data.headers);
     }
 
-    // Read existing maSo values (column 2 = index 1) to detect duplicates
-    var existingMaSo = [];
+    // Build map: maSo (lowercase) -> row number in sheet
     var lastRow = sheet.getLastRow();
+    var maSoRowMap = {};
     if (lastRow > 1) {
       var col2 = sheet.getRange(2, 2, lastRow - 1, 1).getValues();
-      existingMaSo = col2.map(function(r) { return String(r[0]).trim().toLowerCase(); }).filter(Boolean);
+      col2.forEach(function(r, i) {
+        var key = String(r[0]).trim().toLowerCase();
+        if (key) maSoRowMap[key] = i + 2; // row index (1-based, +1 for header)
+      });
     }
 
-    // Find duplicates before inserting
-    var duplicates = [];
+    var inserted = 0, updated = 0;
     data.rows.forEach(function(row) {
       var maSo = String(row[1] || "").trim().toLowerCase();
-      if (maSo && existingMaSo.indexOf(maSo) !== -1) {
-        duplicates.push(row[1]);
+      if (!maSo) return; // skip rows without maSo
+      if (maSoRowMap[maSo]) {
+        // UPDATE existing row
+        sheet.getRange(maSoRowMap[maSo], 1, 1, row.length).setValues([row]);
+        updated++;
+      } else {
+        // INSERT new row
+        sheet.appendRow(row);
+        maSoRowMap[maSo] = sheet.getLastRow(); // track newly added
+        inserted++;
       }
     });
 
-    // Append all rows
-    data.rows.forEach(function(row) { sheet.appendRow(row); });
-
     return ContentService.createTextOutput(JSON.stringify({
       success: true,
-      duplicates: duplicates
+      inserted: inserted,
+      updated: updated
     })).setMimeType(ContentService.MimeType.JSON);
 
   } catch(err) {
@@ -355,15 +363,21 @@ export default function App() {
     showToast("✅ Đã xuất CSV thành công!");
   };
 
-  // Google Sheets Export via Apps Script
+  // Google Sheets Export via Apps Script (upsert: update nếu trùng maSo, insert nếu mới)
   const exportToSheets = async () => {
     if (!settings.scriptUrl) {
       showToast("⚠️ Chưa cài URL Apps Script. Vào ⚙️ Cài đặt để thêm.", "warn");
       return;
     }
+    // Chỉ gửi BN có maSo
+    const toSend = patients.filter(p => p.maSo.trim());
+    if (toSend.length === 0) {
+      showToast("⚠️ Chưa có bệnh nhân nào có Mã số. Nhập maSo trước khi gửi.", "warn");
+      return;
+    }
     setSheetStatus("sending");
     const headers = buildHeaders();
-    const rows = patients.map(patientToRow).map(r => r.map(v => String(v ?? "")));
+    const rows = toSend.map(patientToRow).map(r => r.map(v => String(v ?? "")));
     try {
       const res = await fetch(settings.scriptUrl, {
         method: "POST",
@@ -373,11 +387,8 @@ export default function App() {
       const json = await res.json();
       if (json.success) {
         setSheetStatus("ok");
-        if (json.duplicates && json.duplicates.length > 0) {
-          showToast(`⚠️ Gửi xong nhưng có ${json.duplicates.length} mã BN trùng trên Sheet: ${json.duplicates.slice(0, 3).join(", ")}${json.duplicates.length > 3 ? "..." : ""}`, "warn");
-        } else {
-          showToast("✅ Đã gửi lên Google Sheets! Không có trùng lặp.");
-        }
+        const { inserted = 0, updated = 0 } = json;
+        showToast(`✅ Gửi xong: ${inserted} thêm mới, ${updated} cập nhật.`);
       } else {
         throw new Error(json.error || "Unknown error");
       }
