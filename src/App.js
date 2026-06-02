@@ -157,12 +157,37 @@ const SettingsModal = ({ settings, onSave, onClose }) => {
   try {
     var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
     var data = JSON.parse(e.postData.contents);
+
+    // Write header if sheet is empty
     if (sheet.getLastRow() === 0) {
       sheet.appendRow(data.headers);
     }
+
+    // Read existing maSo values (column 2 = index 1) to detect duplicates
+    var existingMaSo = [];
+    var lastRow = sheet.getLastRow();
+    if (lastRow > 1) {
+      var col2 = sheet.getRange(2, 2, lastRow - 1, 1).getValues();
+      existingMaSo = col2.map(function(r) { return String(r[0]).trim().toLowerCase(); }).filter(Boolean);
+    }
+
+    // Find duplicates before inserting
+    var duplicates = [];
+    data.rows.forEach(function(row) {
+      var maSo = String(row[1] || "").trim().toLowerCase();
+      if (maSo && existingMaSo.indexOf(maSo) !== -1) {
+        duplicates.push(row[1]);
+      }
+    });
+
+    // Append all rows
     data.rows.forEach(function(row) { sheet.appendRow(row); });
-    return ContentService.createTextOutput(JSON.stringify({success: true}))
-      .setMimeType(ContentService.MimeType.JSON);
+
+    return ContentService.createTextOutput(JSON.stringify({
+      success: true,
+      duplicates: duplicates
+    })).setMimeType(ContentService.MimeType.JSON);
+
   } catch(err) {
     return ContentService.createTextOutput(JSON.stringify({error: err.message}))
       .setMimeType(ContentService.MimeType.JSON);
@@ -170,7 +195,24 @@ const SettingsModal = ({ settings, onSave, onClose }) => {
 }
 
 function doGet(e) {
-  return ContentService.createTextOutput("IV App endpoint OK");
+  try {
+    var action = e && e.parameter && e.parameter.action;
+    if (action === "getMaSoList") {
+      var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+      var lastRow = sheet.getLastRow();
+      var maSoList = [];
+      if (lastRow > 1) {
+        var col2 = sheet.getRange(2, 2, lastRow - 1, 1).getValues();
+        maSoList = col2.map(function(r) { return String(r[0]).trim(); }).filter(Boolean);
+      }
+      return ContentService.createTextOutput(JSON.stringify({ maSoList: maSoList }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    return ContentService.createTextOutput("IV App endpoint OK");
+  } catch(err) {
+    return ContentService.createTextOutput(JSON.stringify({ error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
 }`;
             navigator.clipboard.writeText(code);
             alert("✅ Đã copy Apps Script code! Mở Google Sheets → Extensions → Apps Script → Dán code → Deploy.");
@@ -211,7 +253,34 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [toast, setToast] = useState(null);
   const [sheetStatus, setSheetStatus] = useState(null); // null | 'sending' | 'ok' | 'error'
+  const [sheetMaSoList, setSheetMaSoList] = useState([]); // maSo đã có trên Sheet (lowercase)
+  const [syncStatus, setSyncStatus] = useState(null); // null | 'syncing' | 'ok' | 'error'
   const importRef = useRef();
+
+  // Tải danh sách maSo từ Sheet về để kiểm tra trùng real-time
+  const syncFromSheet = async () => {
+    if (!settings.scriptUrl) {
+      showToast("⚠️ Chưa cài URL Apps Script.", "warn");
+      return;
+    }
+    setSyncStatus("syncing");
+    try {
+      const res = await fetch(settings.scriptUrl + "?action=getMaSoList");
+      const json = await res.json();
+      if (json.maSoList) {
+        const list = json.maSoList.map(s => String(s).trim().toLowerCase()).filter(Boolean);
+        setSheetMaSoList(list);
+        setSyncStatus("ok");
+        showToast(`✅ Đã đồng bộ: ${list.length} mã BN từ Sheet.`);
+      } else {
+        throw new Error(json.error || "Không lấy được dữ liệu");
+      }
+    } catch (err) {
+      setSyncStatus("error");
+      showToast("❌ Đồng bộ thất bại: " + err.message, "error");
+    }
+    setTimeout(() => setSyncStatus(null), 4000);
+  };
 
   // Auto-save to localStorage
   useEffect(() => {
@@ -237,6 +306,21 @@ export default function App() {
   };
 
   const patient = patients.find((p) => p.id === selected) || patients[0];
+
+  // Duplicate maSo detection — local (same device) + Sheet (cross-device)
+  const duplicateMap = patients.reduce((acc, p) => {
+    if (!p.maSo.trim()) return acc;
+    acc[p.maSo.trim().toLowerCase()] = (acc[p.maSo.trim().toLowerCase()] || []).concat(p.id);
+    return acc;
+  }, {});
+  const isDuplicate = (p) => p.maSo.trim() && duplicateMap[p.maSo.trim().toLowerCase()]?.length > 1;
+  const currentPatientDuplicate = patient && isDuplicate(patient);
+  const duplicateIds = currentPatientDuplicate
+    ? duplicateMap[patient.maSo.trim().toLowerCase()].filter(id => id !== patient.id)
+    : [];
+  // Check against Sheet's maSo list (cross-device)
+  const isOnSheet = patient && patient.maSo.trim() &&
+    sheetMaSoList.includes(patient.maSo.trim().toLowerCase());
 
   const update = useCallback((field, value) => {
     setPatients((prev) => prev.map((p) => (p.id === selected ? { ...p, [field]: value } : p)));
@@ -289,7 +373,11 @@ export default function App() {
       const json = await res.json();
       if (json.success) {
         setSheetStatus("ok");
-        showToast("✅ Đã gửi lên Google Sheets!");
+        if (json.duplicates && json.duplicates.length > 0) {
+          showToast(`⚠️ Gửi xong nhưng có ${json.duplicates.length} mã BN trùng trên Sheet: ${json.duplicates.slice(0, 3).join(", ")}${json.duplicates.length > 3 ? "..." : ""}`, "warn");
+        } else {
+          showToast("✅ Đã gửi lên Google Sheets! Không có trùng lặp.");
+        }
       } else {
         throw new Error(json.error || "Unknown error");
       }
@@ -427,20 +515,28 @@ export default function App() {
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="🔍 Tìm..." style={{ width: "100%", padding: "6px 8px", border: "1.5px solid #e2e8f0", borderRadius: 7, fontSize: 13, outline: "none", fontFamily: "inherit" }} />
         </div>
         <div style={{ flex: 1, overflowY: "auto", padding: 8 }}>
-          {filtered.map((p) => (
-            <div key={p.id} className={`pat-item ${p.id === selected ? "active" : ""}`} onClick={() => { setSelected(p.id); setSection(0); }}
-              style={{ borderLeft: (p.maSo || p.tuoi) ? "3px solid #22c55e" : "3px solid transparent" }}>
-              <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.6 }}>#{p.id}</span>
-              <span style={{ fontSize: 12, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {p.maSo || <span style={{ opacity: 0.4 }}>Chưa nhập</span>}
-              </span>
-            </div>
-          ))}
+          {filtered.map((p) => {
+            const dup = isDuplicate(p);
+            return (
+              <div key={p.id} className={`pat-item ${p.id === selected ? "active" : ""}`} onClick={() => { setSelected(p.id); setSection(0); }}
+                style={{ borderLeft: dup ? "3px solid #ef4444" : (p.maSo || p.tuoi) ? "3px solid #22c55e" : "3px solid transparent" }}>
+                <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.6 }}>#{p.id}</span>
+                <span style={{ fontSize: 12, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {p.maSo || <span style={{ opacity: 0.4 }}>Chưa nhập</span>}
+                </span>
+                {dup && <span title="Mã số trùng!" style={{ fontSize: 13 }}>⚠️</span>}
+              </div>
+            );
+          })}
         </div>
         <div style={{ padding: 10, borderTop: "1px solid #e2e8f0", display: "flex", flexDirection: "column", gap: 6 }}>
           <button className="btn btn-export" onClick={exportCSV} style={{ width: "100%" }}>⬇ Xuất CSV</button>
           <button className="btn btn-sheets" onClick={exportToSheets} style={{ width: "100%", opacity: sheetStatus === "sending" ? 0.7 : 1 }} disabled={sheetStatus === "sending"}>
             {sheetStatus === "sending" ? "⏳ Đang gửi..." : sheetStatus === "ok" ? "✅ Sheets" : "📊 Gửi Sheets"}
+          </button>
+          <button className="btn" onClick={syncFromSheet} disabled={syncStatus === "syncing"}
+            style={{ width: "100%", background: syncStatus === "ok" ? "#f0fdf4" : "#f8fafc", color: syncStatus === "ok" ? "#16a34a" : "#374151", fontSize: 12, border: `1px solid ${sheetMaSoList.length > 0 ? "#86efac" : "#e2e8f0"}` }}>
+            {syncStatus === "syncing" ? "⏳ Đang đồng bộ..." : syncStatus === "ok" ? `✅ Đã đồng bộ (${sheetMaSoList.length})` : `🔄 Đồng bộ Sheet${sheetMaSoList.length > 0 ? ` (${sheetMaSoList.length})` : ""}`}
           </button>
           <div style={{ display: "flex", gap: 6 }}>
             <button className="btn" style={{ flex: 1, background: "#f8fafc", color: "#374151", fontSize: 12 }} onClick={() => importRef.current.click()}>📥 Import</button>
@@ -481,7 +577,24 @@ export default function App() {
             <div className="card">
               <div className="section-title">1. Thông tin chung của người bệnh</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                <Field label="Mã số người bệnh" required><TextInput value={patient.maSo} onChange={(v) => update("maSo", v)} placeholder="VD: BN001" /></Field>
+                <Field label="Mã số người bệnh" required>
+                  <TextInput value={patient.maSo} onChange={(v) => update("maSo", v)} placeholder="VD: BN001" />
+                  {currentPatientDuplicate && (
+                    <div style={{ marginTop: 6, padding: "7px 12px", background: "#fef2f2", border: "1.5px solid #fca5a5", borderRadius: 7, fontSize: 12, color: "#dc2626", fontWeight: 600 }}>
+                      ⚠️ Trùng với BN #{duplicateIds.join(", #")} trên máy này!
+                    </div>
+                  )}
+                  {isOnSheet && !currentPatientDuplicate && (
+                    <div style={{ marginTop: 6, padding: "7px 12px", background: "#fff7ed", border: "1.5px solid #fed7aa", borderRadius: 7, fontSize: 12, color: "#c2410c", fontWeight: 600 }}>
+                      ⚠️ Mã này đã tồn tại trên Google Sheet! (máy khác đã nhập)
+                    </div>
+                  )}
+                  {isOnSheet && currentPatientDuplicate && (
+                    <div style={{ marginTop: 6, padding: "7px 12px", background: "#fef2f2", border: "1.5px solid #fca5a5", borderRadius: 7, fontSize: 12, color: "#dc2626", fontWeight: 600 }}>
+                      ⚠️ Trùng cả trên máy này (#{duplicateIds.join(", #")}) lẫn trên Sheet!
+                    </div>
+                  )}
+                </Field>
                 <Field label="Tuổi" required><TextInput value={patient.tuoi} onChange={(v) => update("tuoi", v)} placeholder="VD: 65" /></Field>
                 <Field label="Giới" required><RadioGroup options={["Nam", "Nữ"]} value={patient.gioi} onChange={(v) => update("gioi", v)} /></Field>
                 <Field label="T/gian nằm viện đến KS (ngày)"><TextInput value={patient.thoiGianNamVien} onChange={(v) => update("thoiGianNamVien", v)} placeholder="VD: 5" /></Field>
