@@ -262,8 +262,10 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [sheetStatus, setSheetStatus] = useState(null); // null | 'sending' | 'ok' | 'error'
   const [sheetMaSoList, setSheetMaSoList] = useState([]); // maSo đã có trên Sheet (lowercase)
+  const [sentMaSoSet, setSentMaSoSet] = useState(new Set()); // maSo máy NÀY đã gửi lên Sheet
   const [syncStatus, setSyncStatus] = useState(null); // null | 'syncing' | 'ok' | 'error'
   const importRef = useRef();
+  const toastTimerRef = useRef(null);
 
   // Tải danh sách maSo từ Sheet về để kiểm tra trùng real-time
   const syncFromSheet = async () => {
@@ -309,8 +311,9 @@ export default function App() {
   }, [settings.totalPatients]); // eslint-disable-line
 
   const showToast = (msg, type = "success") => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToast({ msg, type });
-    setTimeout(() => setToast(null), 3000);
+    toastTimerRef.current = setTimeout(() => setToast(null), 3500);
   };
 
   const patient = patients.find((p) => p.id === selected) || patients[0];
@@ -327,8 +330,11 @@ export default function App() {
     ? duplicateMap[patient.maSo.trim().toLowerCase()].filter(id => id !== patient.id)
     : [];
   // Check against Sheet's maSo list (cross-device)
+  // Chỉ cảnh báo nếu maSo có trên Sheet mà KHÔNG phải do máy này gửi lên
+  // (tránh false positive khi máy này sync lại sau khi đã gửi data của mình)
   const isOnSheet = patient && patient.maSo.trim() &&
-    sheetMaSoList.includes(patient.maSo.trim().toLowerCase());
+    sheetMaSoList.includes(patient.maSo.trim().toLowerCase()) &&
+    !sentMaSoSet.has(patient.maSo.trim().toLowerCase());
 
   const update = useCallback((field, value) => {
     setPatients((prev) => prev.map((p) => (p.id === selected ? { ...p, [field]: value } : p)));
@@ -388,6 +394,12 @@ export default function App() {
       if (json.success) {
         setSheetStatus("ok");
         const { inserted = 0, updated = 0 } = json;
+        // Đánh dấu các maSo đã gửi từ máy này để không cảnh báo false positive
+        setSentMaSoSet(prev => {
+          const next = new Set(prev);
+          toSend.forEach(p => next.add(p.maSo.trim().toLowerCase()));
+          return next;
+        });
         showToast(`✅ Gửi xong: ${inserted} thêm mới, ${updated} cập nhật.`);
       } else {
         throw new Error(json.error || "Unknown error");
@@ -399,22 +411,87 @@ export default function App() {
     setTimeout(() => setSheetStatus(null), 4000);
   };
 
-  // Import CSV
+  // Import CSV — map đầy đủ tất cả cột về patient object
+  const csvRowToPatient = (cols, base) => {
+    const p = { ...base };
+    p.maSo = cols[1] || "";
+    p.tuoi = cols[2] || "";
+    p.gioi = cols[3] || "";
+    p.chanDoan = cols[4] || "";
+    p.benhKemKhac = cols[5] || "";      // joined benhKem → lưu vào Khác
+    p.vanDong = cols[6] || "";
+    p.thoiGianNamVien = cols[7] || "";
+    p.viTriKimKhac = cols[8] || "";     // joined viTri → lưu vào Khác
+    p.benDat = cols[9] || "";
+    p.coKim = cols[10] || "";
+    p.thoiGianDatKim = cols[11] || "";
+    p.thoiGianLuuKim = cols[12] || "";
+    p.soLanDat = cols[13] || "";
+    p.coDinh = cols[14] || "";
+    p.ghiNgayGio = cols[15] || "";
+    p.loaiDichKhac = cols[16] || "";    // joined loaiDich → lưu vào Khác
+    p.coTruyenThuoc = cols[17] || "";
+    p.nhomThuocKhac = cols[18] || "";   // joined nhomThuoc → lưu vào Khác
+    p.tocDo = cols[19] || "";
+    p.soLanTruyen = cols[20] || "";
+    p.phaThuocDung = cols[21] || "";
+    p.kiemTraViTri = cols[22] || "";
+    p.dieuDuongKiemTra = cols[23] || "";
+    p.tanSuatKiemTra = cols[24] || "";
+    p.huongDanBaoBenhNhan = cols[25] || "";
+    p.giaKho = cols[26] || "";
+    p.thayBang = cols[27] || "";
+    p.ruaTay = cols[28] || "";
+    p.satKhuan = cols[29] || "";
+    p.coBienChung = cols[30] || "";
+    // Complications: cột 31 + i*3
+    const comps = { ...p.complications };
+    COMPLICATIONS.forEach((k, i) => {
+      const b = 31 + i * 3;
+      comps[k] = { co: cols[b] === "X", khong: cols[b + 1] === "X", ghiChu: cols[b + 2] || "" };
+    });
+    p.complications = comps;
+    const compEnd = 31 + COMPLICATIONS.length * 3; // = 61
+    p.mucDo = cols[compEnd] || "";
+    p.thoiDiemKhac = cols[compEnd + 1] || "";  // joined thoiDiem
+    p.ngungTruyen = cols[compEnd + 2] || "";
+    p.doiViTri = cols[compEnd + 3] || "";
+    p.chuom = cols[compEnd + 4] || "";
+    p.baoBacSi = cols[compEnd + 5] || "";
+    p.ghiHoSo = cols[compEnd + 6] || "";
+    p.tinhTrangSauXuTri = cols[compEnd + 7] || "";
+    // Related factors: cột (compEnd+8) + i*2
+    const rfBase = compEnd + 8; // = 69
+    const rfs = { ...p.relatedFactors };
+    RELATED_FACTORS.forEach((k, i) => {
+      const b = rfBase + i * 2;
+      rfs[k] = { co: cols[b] === "X", khong: cols[b + 1] === "X" };
+    });
+    p.relatedFactors = rfs;
+    const rfEnd = rfBase + RELATED_FACTORS.length * 2; // = 85
+    p.bienChungChinh = cols[rfEnd] || "";
+    p.yeuToNoiBat = cols[rfEnd + 1] || "";
+    p.deXuatKhac = cols[rfEnd + 2] || "";  // joined deXuat
+    p.nguoiThuThap = cols[rfEnd + 3] || "";
+    p.ngayThuThap = cols[rfEnd + 4] || "";
+    return p;
+  };
+
   const handleImport = (e) => {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (ev) => {
       try {
-        const text = ev.target.result.replace(/^﻿/, "");
-        const lines = text.split("\n").filter(Boolean);
-        const parseRow = (line) => {
+        const text = ev.target.result.replace(/^﻿/, ""); // strip BOM
+        const lines = text.split(/\r?\n/).filter(Boolean);
+        const parseCSVRow = (line) => {
           const result = [];
           let inQ = false, cur = "";
           for (let i = 0; i < line.length; i++) {
             const c = line[i];
             if (c === '"' && !inQ) { inQ = true; }
-            else if (c === '"' && inQ && line[i+1] === '"') { cur += '"'; i++; }
+            else if (c === '"' && inQ && line[i + 1] === '"') { cur += '"'; i++; }
             else if (c === '"' && inQ) { inQ = false; }
             else if (c === ',' && !inQ) { result.push(cur); cur = ""; }
             else cur += c;
@@ -422,21 +499,20 @@ export default function App() {
           result.push(cur);
           return result;
         };
-        const dataRows = lines.slice(1); // skip header
+        const dataRows = lines.slice(1); // bỏ header
         const updated = [...patients];
+        let count = 0;
         dataRows.forEach((line) => {
-          const cols = parseRow(line);
+          const cols = parseCSVRow(line);
           const id = parseInt(cols[0]);
-          if (!id || id < 1 || id > settings.totalPatients) return;
+          if (!id || id < 1) return;
           const idx = updated.findIndex(p => p.id === id);
-          if (idx === -1) return;
-          const p = { ...updated[idx] };
-          p.maSo = cols[1] || ""; p.tuoi = cols[2] || ""; p.gioi = cols[3] || "";
-          p.chanDoan = cols[4] || ""; p.vanDong = cols[6] || ""; p.thoiGianNamVien = cols[7] || "";
-          updated[idx] = p;
+          if (idx === -1) return; // ngoài range → bỏ qua
+          updated[idx] = csvRowToPatient(cols, updated[idx]);
+          count++;
         });
         setPatients(updated);
-        showToast(`✅ Đã import ${dataRows.length} dòng từ CSV!`);
+        showToast(`✅ Đã import ${count} bệnh nhân từ CSV!`);
       } catch (err) {
         showToast("❌ Lỗi import: " + err.message, "error");
       }
