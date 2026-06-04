@@ -146,42 +146,37 @@ const FluidSpeedPicker = ({ name, item, onChange }) => {
   const isCuThe = selected && tocDo !== "" && tocDo !== "Chậm" && tocDo !== "Trung bình" && tocDo !== "Nhanh" && tocDo !== "Bơm tiêm điện";
   const isBom = tocDo === "Bơm tiêm điện";
   const numVal = isCuThe ? (parseInt(tocDo) || 20) : 20;
-
   const setTocDo = (v) => onChange({ selected, tocDo: v });
   const toggleSelected = (checked) => onChange({ selected: checked, tocDo: checked ? tocDo : "" });
 
   return (
-    <div style={{ marginBottom: 8 }}>
-      {/* Dòng tên dịch + nút chọn tốc độ */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+    <div style={{ marginBottom: 6, paddingBottom: 6, borderBottom: "1px solid #f1f5f9" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         {/* Checkbox tên dịch */}
-        <label style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 7, border: `1.5px solid ${selected ? "#3b82f6" : "#e2e8f0"}`, background: selected ? "#eff6ff" : "white", cursor: "pointer", fontSize: 13, fontWeight: selected ? 600 : 400, color: selected ? "#1d4ed8" : "#374151", minWidth: 110, transition: "all 0.15s" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 10px", borderRadius: 7, border: `1.5px solid ${selected ? "#3b82f6" : "#e2e8f0"}`, background: selected ? "#eff6ff" : "white", cursor: "pointer", fontSize: 13, fontWeight: selected ? 600 : 400, color: selected ? "#1d4ed8" : "#374151", minWidth: 120, transition: "all 0.15s" }}>
           <input type="checkbox" style={{ display: "none" }} checked={selected} onChange={e => toggleSelected(e.target.checked)} />
           {selected ? "☑" : "☐"} {name}
         </label>
 
-        {/* Speed options — chỉ hiện khi đã chọn */}
+        {/* Speed buttons — hiện inline bên phải checkbox */}
         {selected && (
-          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", padding: "6px 10px", background: "#f8fafc", borderRadius: 8, border: "1px solid #e2e8f0" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
             {["Chậm", "Trung bình", "Nhanh"].map(opt => (
               <button key={opt} onClick={() => setTocDo(opt)}
-                style={{ padding: "4px 10px", borderRadius: 6, border: `1.5px solid ${tocDo === opt ? "#3b82f6" : "#e2e8f0"}`, background: tocDo === opt ? "#eff6ff" : "white", color: tocDo === opt ? "#1d4ed8" : "#374151", fontWeight: tocDo === opt ? 700 : 400, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>
+                style={{ padding: "3px 9px", borderRadius: 6, border: `1.5px solid ${tocDo === opt ? "#3b82f6" : "#e2e8f0"}`, background: tocDo === opt ? "#eff6ff" : "#f8fafc", color: tocDo === opt ? "#1d4ed8" : "#374151", fontWeight: tocDo === opt ? 700 : 400, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>
                 {opt}
               </button>
             ))}
-            {/* Cụ thể */}
             <button onClick={() => setTocDo(isCuThe ? tocDo : "20 giọt/phút")}
-              style={{ padding: "4px 10px", borderRadius: 6, border: `1.5px solid ${isCuThe ? "#3b82f6" : "#e2e8f0"}`, background: isCuThe ? "#eff6ff" : "white", color: isCuThe ? "#1d4ed8" : "#374151", fontWeight: isCuThe ? 700 : 400, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>
+              style={{ padding: "3px 9px", borderRadius: 6, border: `1.5px solid ${isCuThe ? "#3b82f6" : "#e2e8f0"}`, background: isCuThe ? "#eff6ff" : "#f8fafc", color: isCuThe ? "#1d4ed8" : "#374151", fontWeight: isCuThe ? 700 : 400, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>
               Cụ thể
             </button>
-            {/* Bơm tiêm điện */}
             <button onClick={() => setTocDo(isBom ? "" : "Bơm tiêm điện")}
-              style={{ padding: "4px 10px", borderRadius: 6, border: `1.5px solid ${isBom ? "#7c3aed" : "#e2e8f0"}`, background: isBom ? "#f5f3ff" : "white", color: isBom ? "#7c3aed" : "#374151", fontWeight: isBom ? 700 : 400, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>
+              style={{ padding: "3px 9px", borderRadius: 6, border: `1.5px solid ${isBom ? "#7c3aed" : "#e2e8f0"}`, background: isBom ? "#f5f3ff" : "#f8fafc", color: isBom ? "#7c3aed" : "#374151", fontWeight: isBom ? 700 : 400, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>
               Bơm tiêm điện
             </button>
-            {/* Kết quả */}
             {tocDo && (
-              <span style={{ fontSize: 12, fontWeight: 700, color: "#16a34a", background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 6, padding: "3px 8px" }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: "#16a34a", background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 6, padding: "2px 8px" }}>
                 → {tocDo}
               </span>
             )}
@@ -191,7 +186,7 @@ const FluidSpeedPicker = ({ name, item, onChange }) => {
 
       {/* Slider — chỉ hiện khi chọn Cụ thể */}
       {selected && isCuThe && (
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6, marginLeft: 8, padding: "8px 12px", background: "#eff6ff", borderRadius: 8, border: "1px solid #bfdbfe" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, marginLeft: 130, padding: "6px 10px", background: "#eff6ff", borderRadius: 8, border: "1px solid #bfdbfe" }}>
           <span style={{ fontSize: 11, color: "#64748b" }}>20</span>
           <input type="range" min={20} max={100} step={1} value={numVal}
             onChange={e => setTocDo(parseInt(e.target.value) + " giọt/phút")}
@@ -199,7 +194,7 @@ const FluidSpeedPicker = ({ name, item, onChange }) => {
           <span style={{ fontSize: 11, color: "#64748b" }}>100</span>
           <input type="number" min={20} max={100} value={numVal}
             onChange={e => { const n = Math.min(100, Math.max(20, parseInt(e.target.value) || 20)); setTocDo(n + " giọt/phút"); }}
-            style={{ width: 56, padding: "4px 6px", border: "1.5px solid #3b82f6", borderRadius: 6, fontSize: 14, fontWeight: 700, color: "#1d4ed8", textAlign: "center", fontFamily: "inherit", outline: "none" }} />
+            style={{ width: 52, padding: "3px 6px", border: "1.5px solid #3b82f6", borderRadius: 6, fontSize: 13, fontWeight: 700, color: "#1d4ed8", textAlign: "center", fontFamily: "inherit", outline: "none" }} />
           <span style={{ fontSize: 11, color: "#64748b" }}>giọt/phút</span>
         </div>
       )}
@@ -807,28 +802,30 @@ export default function App() {
           {section === 2 && (
             <div className="card">
               <div className="section-title">3. Đặc điểm dịch truyền, thuốc truyền</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                <Field label="Loại dịch truyền & Tốc độ" style={{ gridColumn: "span 2" }}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                    {DICH_FLUIDS.map(k => (
-                      <FluidSpeedPicker key={k} name={k}
-                        item={(patient.loaiDichItems || {})[k] || { selected: false, tocDo: "" }}
-                        onChange={item => updateDich(k, item)} />
-                    ))}
-                    {/* Loại dịch khác */}
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
-                      <span style={{ fontSize: 13, color: "#64748b" }}>Khác:</span>
-                      <input value={patient.loaiDichKhac} onChange={e => update("loaiDichKhac", e.target.value)}
-                        placeholder="Tên dịch khác..."
-                        style={{ padding: "5px 10px", border: "1.5px solid #e2e8f0", borderRadius: 7, fontSize: 13, fontFamily: "inherit", outline: "none", width: 150 }} />
-                      {patient.loaiDichKhac && (
-                        <input value={patient.loaiDichKhacTocDo} onChange={e => update("loaiDichKhacTocDo", e.target.value)}
-                          placeholder="Tốc độ..."
-                          style={{ padding: "5px 10px", border: "1.5px solid #e2e8f0", borderRadius: 7, fontSize: 13, fontFamily: "inherit", outline: "none", width: 130 }} />
-                      )}
-                    </div>
+              {/* Loại dịch & tốc độ — full width */}
+              <Field label="Loại dịch truyền & Tốc độ">
+                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  {DICH_FLUIDS.map(k => (
+                    <FluidSpeedPicker key={k} name={k}
+                      item={(patient.loaiDichItems || {})[k] || { selected: false, tocDo: "" }}
+                      onChange={item => updateDich(k, item)} />
+                  ))}
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+                    <span style={{ fontSize: 13, color: "#64748b" }}>Khác:</span>
+                    <input value={patient.loaiDichKhac} onChange={e => update("loaiDichKhac", e.target.value)}
+                      placeholder="Tên dịch khác..."
+                      style={{ padding: "5px 10px", border: "1.5px solid #e2e8f0", borderRadius: 7, fontSize: 13, fontFamily: "inherit", outline: "none", width: 150 }} />
+                    {patient.loaiDichKhac && (
+                      <input value={patient.loaiDichKhacTocDo} onChange={e => update("loaiDichKhacTocDo", e.target.value)}
+                        placeholder="Tốc độ..."
+                        style={{ padding: "5px 10px", border: "1.5px solid #e2e8f0", borderRadius: 7, fontSize: 13, fontFamily: "inherit", outline: "none", width: 130 }} />
+                    )}
                   </div>
-                </Field>
+                </div>
+              </Field>
+
+              {/* Phần còn lại — 2 cột */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 6 }}>
                 <Field label="Có truyền thuốc qua TM ngoại vi"><RadioGroup options={["Có", "Không"]} value={patient.coTruyenThuoc} onChange={(v) => update("coTruyenThuoc", v)} /></Field>
                 {patient.coTruyenThuoc === "Có" && (
                   <Field label="Nhóm thuốc truyền">
