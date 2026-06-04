@@ -25,6 +25,8 @@ const RELATED_FACTORS = [
   "Người bệnh chưa được hướng dẫn báo dấu hiệu bất thường",
 ];
 
+const DICH_FLUIDS = ["NaCl 0,9%", "Glucose", "Ringer lactate", "Dinh dưỡng", "Manitol"];
+
 const STORAGE_KEY = "iv_app_data_v2";
 const SETTINGS_KEY = "iv_app_settings_v1";
 
@@ -34,8 +36,9 @@ const createEmptyPatient = (id) => ({
   benhKemTheo: [], benhKemKhac: "", vanDong: "", thoiGianNamVien: "",
   viTriKim: "", viTriKimKhac: "", benDat: "", coKim: "",
   thoiGianDatKim: "", thoiGianLuuKim: "", soLanDat: "", coDinh: "", ghiNgayGio: "",
-  loaiDich: "", loaiDichKhac: "", coTruyenThuoc: "",
-  nhomThuoc: [], nhomThuocKhac: "", tocDo: "", soLanTruyen: "",
+  loaiDichItems: Object.fromEntries(DICH_FLUIDS.map(k => [k, { selected: false, tocDo: "" }])),
+  loaiDichKhac: "", loaiDichKhacTocDo: "", coTruyenThuoc: "",
+  nhomThuoc: [], nhomThuocKhac: "", soLanTruyen: "",
   phaThuocDung: "", kiemTraViTri: "",
   dieuDuongKiemTra: "", tanSuatKiemTra: "", huongDanBaoBenhNhan: "",
   giaKho: "", thayBang: "", ruaTay: "", satKhuan: "",
@@ -70,9 +73,22 @@ const patientToRow = (p) => [
   p.vanDong, p.thoiGianNamVien,
   [p.viTriKim, p.viTriKimKhac].filter(Boolean).join("+"), p.benDat, p.coKim,
   p.thoiGianDatKim, p.thoiGianLuuKim, p.soLanDat, p.coDinh, p.ghiNgayGio,
-  [p.loaiDich, p.loaiDichKhac].filter(Boolean).join("+"), p.coTruyenThuoc,
+  (() => {
+    const items = p.loaiDichItems || {};
+    const selected = DICH_FLUIDS.filter(k => items[k]?.selected);
+    if (p.loaiDichKhac) selected.push(p.loaiDichKhac);
+    return selected.join("; ");
+  })(),
+  p.coTruyenThuoc,
   [...p.nhomThuoc, p.nhomThuocKhac].filter(Boolean).join("; "),
-  p.tocDo, p.soLanTruyen, p.phaThuocDung, p.kiemTraViTri,
+  (() => {
+    const items = p.loaiDichItems || {};
+    const parts = DICH_FLUIDS.filter(k => items[k]?.selected && items[k]?.tocDo)
+      .map(k => `${k}: ${items[k].tocDo}`);
+    if (p.loaiDichKhac && p.loaiDichKhacTocDo) parts.push(`${p.loaiDichKhac}: ${p.loaiDichKhacTocDo}`);
+    return parts.join("; ");
+  })(),
+  p.soLanTruyen, p.phaThuocDung, p.kiemTraViTri,
   p.dieuDuongKiemTra, p.tanSuatKiemTra, p.huongDanBaoBenhNhan,
   p.giaKho, p.thayBang, p.ruaTay, p.satKhuan,
   p.coBienChung,
@@ -123,6 +139,73 @@ const Field = ({ label, children, required }) => (
 const TextInput = ({ value, onChange, placeholder, type }) => (
   <input type={type || "text"} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} style={{ width: "100%", padding: "8px 12px", border: "1.5px solid #e2e8f0", borderRadius: 8, fontSize: 14, outline: "none", fontFamily: "inherit", transition: "border 0.15s" }} onFocus={(e) => (e.target.style.borderColor = "#3b82f6")} onBlur={(e) => (e.target.style.borderColor = "#e2e8f0")} />
 );
+
+// ---- FLUID SPEED PICKER ----
+const FluidSpeedPicker = ({ name, item, onChange }) => {
+  const { selected, tocDo } = item;
+  const isCuThe = selected && tocDo !== "" && tocDo !== "Chậm" && tocDo !== "Trung bình" && tocDo !== "Nhanh" && tocDo !== "Bơm tiêm điện";
+  const isBom = tocDo === "Bơm tiêm điện";
+  const numVal = isCuThe ? (parseInt(tocDo) || 20) : 20;
+
+  const setTocDo = (v) => onChange({ selected, tocDo: v });
+  const toggleSelected = (checked) => onChange({ selected: checked, tocDo: checked ? tocDo : "" });
+
+  return (
+    <div style={{ marginBottom: 8 }}>
+      {/* Dòng tên dịch + nút chọn tốc độ */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        {/* Checkbox tên dịch */}
+        <label style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 7, border: `1.5px solid ${selected ? "#3b82f6" : "#e2e8f0"}`, background: selected ? "#eff6ff" : "white", cursor: "pointer", fontSize: 13, fontWeight: selected ? 600 : 400, color: selected ? "#1d4ed8" : "#374151", minWidth: 110, transition: "all 0.15s" }}>
+          <input type="checkbox" style={{ display: "none" }} checked={selected} onChange={e => toggleSelected(e.target.checked)} />
+          {selected ? "☑" : "☐"} {name}
+        </label>
+
+        {/* Speed options — chỉ hiện khi đã chọn */}
+        {selected && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", padding: "6px 10px", background: "#f8fafc", borderRadius: 8, border: "1px solid #e2e8f0" }}>
+            {["Chậm", "Trung bình", "Nhanh"].map(opt => (
+              <button key={opt} onClick={() => setTocDo(opt)}
+                style={{ padding: "4px 10px", borderRadius: 6, border: `1.5px solid ${tocDo === opt ? "#3b82f6" : "#e2e8f0"}`, background: tocDo === opt ? "#eff6ff" : "white", color: tocDo === opt ? "#1d4ed8" : "#374151", fontWeight: tocDo === opt ? 700 : 400, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>
+                {opt}
+              </button>
+            ))}
+            {/* Cụ thể */}
+            <button onClick={() => setTocDo(isCuThe ? tocDo : "20 giọt/phút")}
+              style={{ padding: "4px 10px", borderRadius: 6, border: `1.5px solid ${isCuThe ? "#3b82f6" : "#e2e8f0"}`, background: isCuThe ? "#eff6ff" : "white", color: isCuThe ? "#1d4ed8" : "#374151", fontWeight: isCuThe ? 700 : 400, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>
+              Cụ thể
+            </button>
+            {/* Bơm tiêm điện */}
+            <button onClick={() => setTocDo(isBom ? "" : "Bơm tiêm điện")}
+              style={{ padding: "4px 10px", borderRadius: 6, border: `1.5px solid ${isBom ? "#7c3aed" : "#e2e8f0"}`, background: isBom ? "#f5f3ff" : "white", color: isBom ? "#7c3aed" : "#374151", fontWeight: isBom ? 700 : 400, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>
+              Bơm tiêm điện
+            </button>
+            {/* Kết quả */}
+            {tocDo && (
+              <span style={{ fontSize: 12, fontWeight: 700, color: "#16a34a", background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 6, padding: "3px 8px" }}>
+                → {tocDo}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Slider — chỉ hiện khi chọn Cụ thể */}
+      {selected && isCuThe && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6, marginLeft: 8, padding: "8px 12px", background: "#eff6ff", borderRadius: 8, border: "1px solid #bfdbfe" }}>
+          <span style={{ fontSize: 11, color: "#64748b" }}>20</span>
+          <input type="range" min={20} max={100} step={1} value={numVal}
+            onChange={e => setTocDo(parseInt(e.target.value) + " giọt/phút")}
+            style={{ flex: 1, accentColor: "#3b82f6", cursor: "pointer" }} />
+          <span style={{ fontSize: 11, color: "#64748b" }}>100</span>
+          <input type="number" min={20} max={100} value={numVal}
+            onChange={e => { const n = Math.min(100, Math.max(20, parseInt(e.target.value) || 20)); setTocDo(n + " giọt/phút"); }}
+            style={{ width: 56, padding: "4px 6px", border: "1.5px solid #3b82f6", borderRadius: 6, fontSize: 14, fontWeight: 700, color: "#1d4ed8", textAlign: "center", fontFamily: "inherit", outline: "none" }} />
+          <span style={{ fontSize: 11, color: "#64748b" }}>giọt/phút</span>
+        </div>
+      )}
+    </div>
+  );
+};
 
 // ---- SETTINGS MODAL ----
 const SettingsModal = ({ settings, onSave, onClose }) => {
@@ -348,6 +431,13 @@ export default function App() {
     setPatients((prev) => prev.map((p) => p.id === selected ? { ...p, relatedFactors: { ...p.relatedFactors, [key]: { ...p.relatedFactors[key], [subKey]: value } } } : p));
   }, [selected]);
 
+  const updateDich = useCallback((key, item) => {
+    setPatients((prev) => prev.map((p) => p.id === selected ? {
+      ...p,
+      loaiDichItems: { ...(p.loaiDichItems || {}), [key]: item }
+    } : p));
+  }, [selected]);
+
   const resetPatient = () => {
     if (!window.confirm(`Xóa toàn bộ dữ liệu bệnh nhân #${selected}?`)) return;
     setPatients((prev) => prev.map((p) => p.id === selected ? createEmptyPatient(selected) : p));
@@ -534,7 +624,7 @@ export default function App() {
   const sectionCompletion = patient ? [
     patient.tuoi && patient.gioi && patient.chanDoan,
     patient.viTriKim && patient.benDat && patient.coKim,
-    patient.loaiDich && patient.coTruyenThuoc,
+    (patient.loaiDichItems && DICH_FLUIDS.some(k => patient.loaiDichItems[k]?.selected)) && patient.coTruyenThuoc,
     patient.dieuDuongKiemTra && patient.huongDanBaoBenhNhan,
     patient.coBienChung,
     !patient.coBienChung || patient.coBienChung === "Không" || patient.ngungTruyen,
@@ -718,8 +808,26 @@ export default function App() {
             <div className="card">
               <div className="section-title">3. Đặc điểm dịch truyền, thuốc truyền</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                <Field label="Loại dịch truyền">
-                  <CheckGroup options={["NaCl 0,9%", "Glucose", "Ringer lactate", "Dinh dưỡng"]} values={patient.loaiDich ? [patient.loaiDich] : []} onChange={(v) => update("loaiDich", v[v.length - 1] || "")} otherKey="loaiDichKhac" otherValue={patient.loaiDichKhac} onOtherChange={(v) => update("loaiDichKhac", v)} />
+                <Field label="Loại dịch truyền & Tốc độ" style={{ gridColumn: "span 2" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    {DICH_FLUIDS.map(k => (
+                      <FluidSpeedPicker key={k} name={k}
+                        item={(patient.loaiDichItems || {})[k] || { selected: false, tocDo: "" }}
+                        onChange={item => updateDich(k, item)} />
+                    ))}
+                    {/* Loại dịch khác */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+                      <span style={{ fontSize: 13, color: "#64748b" }}>Khác:</span>
+                      <input value={patient.loaiDichKhac} onChange={e => update("loaiDichKhac", e.target.value)}
+                        placeholder="Tên dịch khác..."
+                        style={{ padding: "5px 10px", border: "1.5px solid #e2e8f0", borderRadius: 7, fontSize: 13, fontFamily: "inherit", outline: "none", width: 150 }} />
+                      {patient.loaiDichKhac && (
+                        <input value={patient.loaiDichKhacTocDo} onChange={e => update("loaiDichKhacTocDo", e.target.value)}
+                          placeholder="Tốc độ..."
+                          style={{ padding: "5px 10px", border: "1.5px solid #e2e8f0", borderRadius: 7, fontSize: 13, fontFamily: "inherit", outline: "none", width: 130 }} />
+                      )}
+                    </div>
+                  </div>
                 </Field>
                 <Field label="Có truyền thuốc qua TM ngoại vi"><RadioGroup options={["Có", "Không"]} value={patient.coTruyenThuoc} onChange={(v) => update("coTruyenThuoc", v)} /></Field>
                 {patient.coTruyenThuoc === "Có" && (
@@ -727,42 +835,6 @@ export default function App() {
                     <CheckGroup options={["Kháng sinh", "Giảm đau", "Vận mạch", "Kali", "Hóa chất"]} values={patient.nhomThuoc} onChange={(v) => update("nhomThuoc", v)} otherKey="nhomThuocKhac" otherValue={patient.nhomThuocKhac} onOtherChange={(v) => update("nhomThuocKhac", v)} />
                   </Field>
                 )}
-                <Field label="Tốc độ truyền">
-                  {(() => {
-                    const isBom = patient.tocDo === "Bơm tiêm điện";
-                    const numVal = isBom ? 20 : (parseInt(patient.tocDo) || 20);
-                    const handleSlider = (v) => update("tocDo", v + " giọt/phút");
-                    const handleInput = (v) => {
-                      const n = Math.min(100, Math.max(20, parseInt(v) || 20));
-                      update("tocDo", n + " giọt/phút");
-                    };
-                    return (
-                      <div>
-                        {!isBom && (
-                          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
-                            <span style={{ fontSize: 12, color: "#64748b", whiteSpace: "nowrap" }}>20</span>
-                            <input type="range" min={20} max={100} step={1}
-                              value={numVal}
-                              onChange={e => handleSlider(parseInt(e.target.value))}
-                              style={{ flex: 1, accentColor: "#3b82f6", height: 6, cursor: "pointer" }} />
-                            <span style={{ fontSize: 12, color: "#64748b", whiteSpace: "nowrap" }}>100</span>
-                            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                              <input type="number" min={20} max={100} value={numVal}
-                                onChange={e => handleInput(e.target.value)}
-                                style={{ width: 64, padding: "6px 8px", border: "1.5px solid #3b82f6", borderRadius: 7, fontSize: 14, fontWeight: 700, color: "#1d4ed8", textAlign: "center", fontFamily: "inherit", outline: "none" }} />
-                              <span style={{ fontSize: 12, color: "#64748b", whiteSpace: "nowrap" }}>giọt/phút</span>
-                            </div>
-                          </div>
-                        )}
-                        <label style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 7, border: `1.5px solid ${isBom ? "#3b82f6" : "#e2e8f0"}`, background: isBom ? "#eff6ff" : "white", cursor: "pointer", fontSize: 13, fontWeight: isBom ? 600 : 400, color: isBom ? "#1d4ed8" : "#374151", width: "fit-content" }}>
-                          <input type="checkbox" style={{ display: "none" }} checked={isBom}
-                            onChange={e => update("tocDo", e.target.checked ? "Bơm tiêm điện" : "20 giọt/phút")} />
-                          {isBom ? "☑" : "☐"} Bơm tiêm điện
-                        </label>
-                      </div>
-                    );
-                  })()}
-                </Field>
                 <Field label="Số lần truyền trong ngày"><RadioGroup options={["1 lần", "2 lần", "≥ 3 lần"]} value={patient.soLanTruyen} onChange={(v) => update("soLanTruyen", v)} /></Field>
                 <Field label="Pha thuốc đúng quy định"><RadioGroup options={["Có", "Không", "Không đánh giá"]} value={patient.phaThuocDung} onChange={(v) => update("phaThuocDung", v)} /></Field>
                 <Field label="Kiểm tra vị trí truyền trong quá trình"><RadioGroup options={["Có", "Không"]} value={patient.kiemTraViTri} onChange={(v) => update("kiemTraViTri", v)} /></Field>
