@@ -829,7 +829,7 @@ export default function App() {
                 <Field label="Có truyền thuốc qua TM ngoại vi"><RadioGroup options={["Có", "Không"]} value={patient.coTruyenThuoc} onChange={(v) => update("coTruyenThuoc", v)} /></Field>
                 {patient.coTruyenThuoc === "Có" && (
                   <Field label="Nhóm thuốc truyền">
-                    <CheckGroup options={["Kháng sinh", "Giảm đau", "Vận mạch", "Kali", "Hóa chất"]} values={patient.nhomThuoc} onChange={(v) => update("nhomThuoc", v)} otherKey="nhomThuocKhac" otherValue={patient.nhomThuocKhac} onOtherChange={(v) => update("nhomThuocKhac", v)} />
+                    <CheckGroup options={["Kháng sinh", "Giảm đau", "Vận mạch", "Kali", "Hóa chất", "An thần", "Nimodipine", "Nicardipine"]} values={patient.nhomThuoc} onChange={(v) => update("nhomThuoc", v)} otherKey="nhomThuocKhac" otherValue={patient.nhomThuocKhac} onOtherChange={(v) => update("nhomThuocKhac", v)} />
                   </Field>
                 )}
                 <Field label="Số lần truyền trong ngày"><RadioGroup options={["1 lần", "2 lần", "≥ 3 lần"]} value={patient.soLanTruyen} onChange={(v) => update("soLanTruyen", v)} /></Field>
